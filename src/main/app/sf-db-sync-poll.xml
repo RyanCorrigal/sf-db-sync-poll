@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+    <flow name="mainFlow" processingStrategy="synchronous">
+        <poll doc:name="Poll">
+            <fixed-frequency-scheduler frequency="30" timeUnit="SECONDS"/>
+            <watermark variable="timeStamp" default-expression="${defaultLastWatermarkDate}" selector="LAST" selector-expression="#[payload.LastModifiedDate]"/>
+            <sfdc:query config-ref="Salesforce__Basic_Authentication" query="dsql:SELECT AccountNumber,Id,IsDeleted,LastModifiedDate,Name,Phone FROM Account ORDER BY LastModifiedDate ASC" doc:name="Salesforce"/>
+        </poll>
+        <foreach doc:name="For Each">
+            <db:select config-ref="MySQL_Configuration" target="#[flowVars.targetId]" doc:name="lookupAccount">
+                <db:parameterized-query><![CDATA[SELECT SourceId
+FROM Accounts
+WHERE SourceId = #[payload.Id]]]></db:parameterized-query>
+            </db:select>
+            <choice doc:name="Determine Operation Type">
+                <when expression="#[flowVars.targetId == empty]">
+                    <db:insert config-ref="MySQL_Configuration" doc:name="insertAccount">
+                        <db:parameterized-query><![CDATA[INSERT INTO Accounts (SourceId, AccountNumber, Name, Phone, IsDeleted)
+VALUES (
+	#[payload.Id],
+	#[payload.AccountNumber],
+	#[payload.Name],
+	#[payload.Phone],
+	#[payload.IsDeleted == true ? 1 : 0]
+)]]></db:parameterized-query>
+                    </db:insert>
+                    <logger message="Successfully insterted record #[payload.Id]." level="INFO" category="sf-db-sync-poll" doc:name="Logger"/>
+                </when>
+                <otherwise>
+                    <db:update config-ref="MySQL_Configuration" doc:name="updateAccount">
+                        <db:parameterized-query><![CDATA[UPDATE Accounts
+
+SET
+SourceId = #[payload.Id],
+AccountNumber = #[payload.AccountNumber],
+Name = #[payload.Name],
+Phone = #[payload.Phone],
+IsDeleted = #[payload.IsDeleted == true ? 1 : 0]
+
+WHERE SourceId = #[payload.Id]]]></db:parameterized-query>
+                    </db:update>
+                    <logger message="Successfully updated record #[payload.Id]." level="INFO" category="sf-db-sync-poll" doc:name="Logger"/>
+                </otherwise>
+            </choice>
+        </foreach>
+    </flow>
+    <catch-exception-strategy name="catchExceptionStrategy">
+        <logger message="The synchronization operation failed on record #[payload.Id + '\n\n']. #[resultArray=exception.getCauseException().getMessage().ssplit(&quot;\\n&quot;); result=resultArray[0].replace(&quot;\&quot;&quot;,&quot;\\\&quot;&quot;);" level="ERROR" category="sf-db-sync-poll" doc:name="Logger"/>
+    </catch-exception-strategy>
+</mule>
