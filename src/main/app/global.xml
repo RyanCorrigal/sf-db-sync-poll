@@ -9,8 +9,8 @@ http://www.springframework.org/schema/context http://www.springframework.org/sch
 http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
 http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
 http://www.mulesoft.org/schema/mule/secure-property-placeholder http://www.mulesoft.org/schema/mule/secure-property-placeholder/current/mule-secure-property-placeholder.xsd">
-    <context:property-placeholder location="sf-db-sync-poll-${env}.properties"/>
+    <context:property-placeholder location="sf-db-sync-poll-${mule.env}.properties"/>
     <sfdc:config name="Salesforce__Basic_Authentication" username="${sf.username}" password="${sf.password}" securityToken="${sf.token}" url="${sf.url}" doc:name="Salesforce: Basic Authentication"/>
     <db:mysql-config name="MySQL_Configuration" host="${mysql.host}" port="${mysql.port}" user="${mysql.user}" password="${mysql.password}" database="${mysql.database}" doc:name="MySQL Configuration"/>
-    <secure-property-placeholder:config name="Secure_Property_Placeholder" key="${encryptionKey}" location="sf-db-sync-poll-${env}.properties" doc:name="Secure Property Placeholder"/>
+    <secure-property-placeholder:config name="Secure_Property_Placeholder" key="${mule.key}" location="sf-db-sync-poll-${mule.env}.properties" doc:name="Secure Property Placeholder"/>
 </mule>
